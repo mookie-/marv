@@ -1,0 +1,33 @@
+---
+threads: 2
+
+backup:
+  db-foo1:
+    host: localhost
+    type: mysql
+    db: mysql
+    user: root
+    pw: foobar
+    tables: user
+    backup_dir: /mnt/backups
+    crypt_passfile: /mnt/backups/cryptpassword
+    s3_bucket: foo-db-bucket
+    s3_access_key: asdf
+    s3_secret_access_key: fdsa
+  local-mysql-all:
+    host: localhost
+    type: mysql
+    db: :all
+    user: root
+    pw: foobar
+    backup_dir: /mnt/backups
+    crypt_passfile: /mnt/backups/cryptpassword
+  foo:
+    type: local_dir
+    path: /home/foo
+    backup_dir: /mnt/backups
+    crypt_passfile: /mnt/backups/cryptpassword
+  bar:
+    type: local_dir
+    path: /path2
+    backup_dir: /mnt/backups
