@@ -95,14 +95,32 @@ def psql(host, username, password, database, tables, backup_dir, crypt_passfile,
   end
 end
 
-def local_dir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_secret_access_key)
+def local_dir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_secret_access_key, prefix)
   log("start backup dir #{path} to #{backup_dir}")
   directory_name = File.basename(path)
-  directory_path = "#{backup_dir}/#{directory_name}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.tar.bz2"
+  prefix = prefix + "-" if prefix
+  directory_path = "#{backup_dir}/#{prefix}#{directory_name}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.tar.bz2"
   `/bin/tar -cjf #{directory_path} #{path}`
   log("Backup of #{directory_path} failed", 'error') unless File.exists? directory_path
   crypt(directory_path,crypt_passfile) if crypt_passfile
   log("finish backup dir #{path} to #{backup_dir}")
+end
+
+def local_subdir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_secret_access_key)
+  log("start subdir backup of #{path} to #{backup_dir}")
+  subdirs = `ls -1 #{path}`.split("\n")
+  subdirs.each do |subdir|
+    backup = Hash.new
+    backup['type'] = 'local_dir'
+    backup['path'] = path + "/" + subdir
+    backup['backup_dir'] = backup_dir
+    backup['crypt_passfile'] = crypt_passfile
+    backup['s3_bucket'] = s3_bucket
+    backup['s3_access_key'] = s3_access_key
+    backup['s3_secret_access_key'] = s3_secret_access_key
+    backup['prefix'] = File.basename(path)
+    @queue << backup
+  end
 end
 
 def to_s3(path, bucket, access_key, secret_access_key)
@@ -118,7 +136,7 @@ config_path = ARGV[0] || 'config.yaml'
 
 config = YAML::load(File.read(config_path))
 
-queue = Queue.new
+@queue = Queue.new
 threads = []
 
 config['backup'].each do |type,values|
@@ -126,15 +144,15 @@ config['backup'].each do |type,values|
   values.each do |name,value|
     backup["#{name}"] = value
   end
-  queue << backup
+  @queue << backup
 end
 
 log("backup run with #{config['threads']} threads")
 
 config['threads'].times do
   threads << Thread.new do
-    until queue.empty?
-      backup = queue.pop(true) rescue nil
+    until @queue.empty?
+      backup = @queue.pop(true) rescue nil
       if backup
         case backup['type']
         when "mysql"
@@ -142,7 +160,9 @@ config['threads'].times do
         when "psql"
           psql(backup['host'], backup['user'], backup['pw'], backup['db'], backup['tables'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
         when "local_dir"
-          local_dir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
+          local_dir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'], backup['prefix'])
+        when "local_subdir"
+          local_subdir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
         else
           log("backuptype #{backup['type']} not available", 'error')
         end
