@@ -110,7 +110,10 @@ def local_dir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_sec
   directory_path = "#{backup_dir}/#{prefix}#{directory_name}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.tar.bz2"
   `/bin/tar -cjf #{directory_path} #{path}`
   log("Backup of #{directory_path} failed", 'error') unless File.exists? directory_path
-  crypt(directory_path,crypt_passfile) if crypt_passfile
+  directory_path = crypt(directory_path,crypt_passfile) if crypt_passfile
+  if s3_bucket && s3_access_key && s3_secret_access_key
+    to_s3(directory_path, s3_bucket, s3_access_key, s3_secret_access_key)
+  end
   log("finish backup dir #{path} to #{backup_dir}")
 end
 
