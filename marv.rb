@@ -137,8 +137,19 @@ end
 def to_s3(path, bucket, access_key, secret_access_key)
   log("start s3 upload for file #{path}")
   s3 = RightAws::S3Interface.new(access_key, secret_access_key)
-  s3.put(bucket, File.basename(path), File.open(path))
-  log("finish s3 upload for file #{path}")
+  begin
+    s3.put(bucket, File.basename(path), File.open(path))
+    log("finish s3 upload for file #{path}")
+  rescue RightAws::AwsError
+    log("failed s3 upload for file #{path}", 'error')
+    backup = Hash.new
+    backup['path'] = path
+    backup['bucket'] = bucket
+    backup['access_key'] = access_key
+    backup['secret_access_key'] = secret_access_key
+    @queue << backup
+    log("added s3 upload for file #{path} to queue")
+  end
 end
 
 log("start marv backup")
@@ -174,6 +185,8 @@ config['threads'].times do
           local_dir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'], backup['prefix'])
         when "local_subdir"
           local_subdir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
+        when "s3_upload"
+          to_s3(backup['path'], backup['bucket'], backup['access_key'], backup['secret_access_key'])
         else
           log("backuptype #{backup['type']} not available", 'error')
         end
