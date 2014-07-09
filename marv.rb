@@ -40,38 +40,49 @@ def crypt(file_path,crypt_passfile)
   end
 end
 
-def dump_mysql(host, username, password, database, sslca, tables, backup_dir, crypt_passfile, dump_path)
+def dump_mysql(host, username, password, database, sslca, tables, backup_dir, crypt_passfile, dump_path, compress)
   sslca = '--ssl-ca=' + sslca if sslca
-  command = "/usr/bin/mysqldump #{sslca} -h\"#{host}\" -u\"#{username}\" -p\"#{password}\" #{database} #{tables} -r #{dump_path}"
+  if compress
+    compress = "|#{compress}"
+  end
+  if crypt_passfile
+    crypt_passfile = "|/usr/bin/openssl enc -aes-256-cbc -salt -pass file:#{crypt_passfile}"
+  end
+  command = "/usr/bin/mysqldump #{sslca} -h\"#{host}\" -u\"#{username}\" -p\"#{password}\" #{database} #{tables} #{compress} #{crypt_passfile} > #{dump_path}"
 end
 
 def dump_psql(host, username, password, database, tables, backup_dir, crypt_passfile, dump_path)
+  if compress
+    compress = "|#{compress}"
+  end
+  if crypt_passfile
+    crypt_passfile = "|/usr/bin/openssl enc -aes-256-cbc -salt -pass file:#{crypt_passfile}"
+  end
   tables = '--table' + tables if tables
-  command = "PGPASSWORD=#{password} /usr/bin/pg_dump -h\"#{host}\" #{tables} -U\"#{username}\" #{database} -f #{dump_path}"
+  command = "PGPASSWORD=#{password} /usr/bin/pg_dump -h\"#{host}\" #{tables} -U\"#{username}\" #{database} #{compress} #{crypt_passfile} > #{dump_path}"
 end
 
-def dump_database(type, host, username, password, database, sslca, tables, backup_dir, crypt_passfile, s3_bucket = nil, s3_access_key = nil, s3_secret_access_key = nil)
+def dump_database(type, host, username, password, database, sslca, tables, backup_dir, crypt_passfile, s3_bucket = nil, s3_access_key = nil, s3_secret_access_key = nil, compress = 'bzip2')
   log("start dump #{type} host=#{host} db=#{database} tables=#{tables} to #{backup_dir}")
   tablestring = '-tables-' + tables.gsub(/ /, '_') if tables
   dump_filename = "#{type}-#{host}-#{database}#{tablestring}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.sql"
   dump_path = "#{backup_dir}/#{dump_filename}"
+  dump_path = dump_path + '.' + compress if compress
+  dump_path = dump_path + '.enc' if crypt_passfile
   case type
   when "mysql"
-    command = dump_mysql(host, username, password, database, sslca, tables, backup_dir, crypt_passfile, dump_path)
+    command = dump_mysql(host, username, password, database, sslca, tables, backup_dir, crypt_passfile, dump_path, compress)
   when "psql"
-    command = dump_psql(host, username, password, database, tables, backup_dir, crypt_passfile, dump_path)
+    command = dump_psql(host, username, password, database, tables, backup_dir, crypt_passfile, dump_path, compress)
   else
     log("databasetype #{type} not available", 'error')
   end
   `#{command}`
   if File.exists? dump_path
     log("finish dump #{type} host=#{host} db=#{database} tables=#{tables} to #{backup_dir}")
-    `/bin/bzip2 #{dump_path}`
-    dump_path = "#{dump_path}.bz2"
   else
-    log("MySQLdump failed #{dump_filename}", 'error')
+    log("dump failed failed #{dump_filename}", 'error')
   end
-  dump_path = crypt(dump_path,crypt_passfile) if crypt_passfile
   if s3_bucket && s3_access_key && s3_secret_access_key
     to_s3(dump_path, s3_bucket, s3_access_key, s3_secret_access_key)
   end
@@ -107,9 +118,12 @@ def local_dir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_sec
   directory_name = File.basename(path)
   prefix = prefix + "-" if prefix
   directory_path = "#{backup_dir}/#{prefix}#{directory_name}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.tar.bz2"
-  `/bin/tar -cjf #{directory_path} #{path}`
+  if crypt_passfile
+    crypt_passfile = "|/usr/bin/openssl enc -aes-256-cbc -salt -pass file:#{crypt_passfile}"
+    directory_path = directory_path + '.enc'
+  end
+  `/bin/tar -cj #{path} #{crypt_passfile} > #{directory_path}`
   log("Backup of #{directory_path} failed", 'error') unless File.exists? directory_path
-  directory_path = crypt(directory_path,crypt_passfile) if crypt_passfile
   if s3_bucket && s3_access_key && s3_secret_access_key
     to_s3(directory_path, s3_bucket, s3_access_key, s3_secret_access_key)
   end
