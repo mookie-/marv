@@ -149,9 +149,10 @@ end
 
 def to_s3(path, bucket, access_key, secret_access_key)
   log("start s3 upload for file #{path}")
-  s3 = RightAws::S3Interface.new(access_key, secret_access_key)
+  s3 = RightAws::S3.new(access_key, secret_access_key)
   begin
-    s3.put(bucket, File.basename(path), File.open(path))
+    key = RightAws::S3::Key.create(s3.bucket(bucket), File.basename(path))
+    key.put_multipart(File.open(path), nil, {}, 500*1024*1024)
     log("finish s3 upload for file #{path}")
   rescue RightAws::AwsError
     log("failed s3 upload for file #{path}", 'error')
