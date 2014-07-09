@@ -8,7 +8,6 @@
 #   * ----------------------------------------------------------------------------
 #
 
-require 'thread'
 require 'yaml'
 require 'rubygems'
 require 'right_aws'
@@ -56,7 +55,7 @@ def dump_database(type, host, username, password, database, sslca, tables, backu
   tablestring = '-tables-' + tables.gsub(/ /, '_') if tables
   dump_filename = "#{type}-#{host}-#{database}#{tablestring}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.sql"
   dump_path = "#{backup_dir}/#{dump_filename}"
-  case type 
+  case type
   when "mysql"
     command = dump_mysql(host, username, password, database, sslca, tables, backup_dir, crypt_passfile, dump_path)
   when "psql"
@@ -159,7 +158,6 @@ config_path = ARGV[0] || 'config.yaml'
 config = YAML::load(File.read(config_path))
 
 @queue = Queue.new
-threads = []
 
 config['backup'].each do |type,values|
   backup = Hash.new
@@ -169,30 +167,22 @@ config['backup'].each do |type,values|
   @queue << backup
 end
 
-log("backup run with #{config['threads']} threads")
-
-config['threads'].times do
-  threads << Thread.new do
-    until @queue.empty?
-      backup = @queue.pop(true) rescue nil
-      if backup
-        case backup['type']
-        when "mysql"
-          mysql(backup['host'], backup['user'], backup['pw'], backup['db'], backup['sslca'], backup['tables'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
-        when "psql"
-          psql(backup['host'], backup['user'], backup['pw'], backup['db'], backup['tables'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
-        when "local_dir"
-          local_dir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'], backup['prefix'])
-        when "local_subdir"
-          local_subdir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
-        when "s3_upload"
-          to_s3(backup['path'], backup['bucket'], backup['access_key'], backup['secret_access_key'])
-        else
-          log("backuptype #{backup['type']} not available", 'error')
-        end
-      end
+until @queue.empty?
+  backup = @queue.pop(true) rescue nil
+  if backup
+    case backup['type']
+    when "mysql"
+      mysql(backup['host'], backup['user'], backup['pw'], backup['db'], backup['sslca'], backup['tables'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
+    when "psql"
+      psql(backup['host'], backup['user'], backup['pw'], backup['db'], backup['tables'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
+    when "local_dir"
+      local_dir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'], backup['prefix'])
+    when "local_subdir"
+      local_subdir(backup['path'], backup['backup_dir'], backup['crypt_passfile'], backup['s3_bucket'], backup['s3_access_key'], backup['s3_secret_access_key'])
+    when "s3_upload"
+      to_s3(backup['path'], backup['bucket'], backup['access_key'], backup['secret_access_key'])
+    else
+      log("backuptype #{backup['type']} not available", 'error')
     end
   end
 end
-
-threads.each { |t| t.join }
