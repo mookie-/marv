@@ -51,7 +51,7 @@ def dump_mysql(host, username, password, database, sslca, tables, backup_dir, cr
   command = "/usr/bin/mysqldump #{sslca} -h\"#{host}\" -u\"#{username}\" -p\"#{password}\" #{database} #{tables} #{compress} #{crypt_passfile} > #{dump_path}"
 end
 
-def dump_psql(host, username, password, database, tables, backup_dir, crypt_passfile, dump_path)
+def dump_psql(host, username, password, database, tables, backup_dir, crypt_passfile, dump_path, compress)
   if compress
     compress = "|#{compress}"
   end
