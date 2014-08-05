@@ -11,6 +11,7 @@
 require 'yaml'
 require 'rubygems'
 require 'right_aws'
+require 'thread'
 
 def log(message, type=nil)
   case type
