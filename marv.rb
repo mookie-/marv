@@ -97,7 +97,7 @@ def local_dir(path, backup_dir, crypt_passfile, s3_bucket, s3_access_key, s3_sec
   prefix = prefix + "-" if prefix
   directory_path = "#{backup_dir}/#{prefix}#{directory_name}-#{Time.now.strftime("%Y_%m_%d-%H_%M_%S")}.tar.gz"
   if crypt_passfile
-    crypt_passfile = "|ionice -c 3 /usr/bin/openssl enc -aes-256-cbc -salt -pass file:#{crypt_passfile}"
+    crypt_passfile = "|ionice -c 3 nice /usr/bin/openssl enc -aes-256-cbc -salt -pass file:#{crypt_passfile}"
     directory_path = directory_path + '.enc'
   end
   `ionice -c 3 nice /bin/tar -cz #{path} #{crypt_passfile} > #{directory_path}`
